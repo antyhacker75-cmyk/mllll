@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Plus, RotateCcw, Search, ShieldAlert, Sparkles, Swords, Users, X } from 'lucide-react';
+import { ArrowRight, Check, Plus, RotateCcw, Search, ShieldAlert, Sparkles, Swords, Users, X } from 'lucide-react';
 import { fetchHeroCompatibility } from '../services/roneApi';
 import type {
   EquipmentRecord,
@@ -10,6 +10,7 @@ import type {
 import { buildTeamComboRecommendations } from '../utils/comboEngine';
 import { analyzeDraftAndRecommendItems } from '../utils/counterEngine';
 import type { HeroMetadataSummary } from '../utils/mlbb';
+import { predictTeamWinProbability } from '../utils/winPredictor';
 import { SafeImage } from './SafeImage';
 
 interface ItemCounterViewProps {
@@ -18,6 +19,7 @@ interface ItemCounterViewProps {
   heroNameMap: Map<number, { name: string; head: string }>;
   equipmentList: EquipmentRecord[];
   equipmentLoading: boolean;
+  onSendToPredictor?: (allyIds: number[], enemyIds: number[]) => void;
 }
 
 type SlotTarget =
@@ -49,6 +51,7 @@ export function ItemCounterView({
   heroNameMap,
   equipmentList,
   equipmentLoading,
+  onSendToPredictor,
 }: ItemCounterViewProps) {
   const [myHeroId, setMyHeroId] = useState<number | null>(null);
   const [allyHeroIds, setAllyHeroIds] = useState<Array<number | null>>([null, null, null, null]);
@@ -119,6 +122,23 @@ export function ItemCounterView({
   const activeEnemies = useMemo(
     () => enemyHeroIds.filter((id): id is number => id !== null),
     [enemyHeroIds],
+  );
+
+  const draftAllies = useMemo(
+    () => (myHeroId ? [myHeroId, ...activeAllies] : activeAllies),
+    [myHeroId, activeAllies],
+  );
+
+  const draftPrediction = useMemo(
+    () =>
+      predictTeamWinProbability({
+        allyHeroIds: draftAllies,
+        enemyHeroIds: activeEnemies,
+        heroRanks,
+        positionMap,
+        heroNameMap,
+      }),
+    [draftAllies, activeEnemies, heroRanks, positionMap, heroNameMap],
   );
 
   const analysis = useMemo(
@@ -478,6 +498,38 @@ export function ItemCounterView({
                     <span>{note}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {draftPrediction.hasTeams && (
+              <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-slate-400">Draft Win Probability:</span>
+                  <span
+                    className={`font-mono tabular-nums text-sm font-bold ${
+                      draftPrediction.winProbabilityPct >= 54
+                        ? 'text-emerald-400'
+                        : draftPrediction.winProbabilityPct > 46
+                          ? 'text-amber-300'
+                          : 'text-rose-400'
+                    }`}
+                  >
+                    {draftPrediction.winProbabilityPct.toFixed(1)}%
+                  </span>
+                  <span aria-hidden="true" className="text-slate-600">·</span>
+                  <span className="text-slate-300">{draftPrediction.verdict}</span>
+                </div>
+
+                {onSendToPredictor && (
+                  <button
+                    type="button"
+                    onClick={() => onSendToPredictor(draftAllies, activeEnemies)}
+                    className="text-xs font-medium text-amber-300 hover:text-amber-200 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <span>Open Full Win Predictor Gauge</span>
+                    <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                )}
               </div>
             )}
           </div>

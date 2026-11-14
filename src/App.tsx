@@ -7,7 +7,7 @@ import { ItemCounterView } from './components/ItemCounterView';
 import { PlayerDossierView } from './components/PlayerDossierView';
 import { RankLadderView } from './components/RankLadderView';
 import { TopNav, type AppTab } from './components/TopNav';
-import { WinRateCalculatorView } from './components/WinRateCalculatorView';
+import { WinPredictorView } from './components/WinPredictorView';
 import { SAMPLE_PLAYER_DOSSIER, type PlayerDossierData } from './data/samplePlayer';
 import {
   fetchAcademyRanks,
@@ -27,11 +27,13 @@ import {
 import type {
   DaysFilter,
   EquipmentRecord,
+  FavoriteHeroLineup,
   HeroPositionRecord,
   HeroRankRecord,
   RankFilter,
   RankRecord,
 } from './types/mlbb';
+import { loadSavedLineupsFromStorage } from './utils/favoriteLineup';
 import { extractHeroPositionMap } from './utils/mlbb';
 
 const JWT_STORAGE_KEY = 'dawnsight_mlbb_jwt';
@@ -67,6 +69,62 @@ export default function App() {
 
   // Hero Deep-Dive Drawer
   const [selectedHeroId, setSelectedHeroId] = useState<number | null>(null);
+
+  // Shared Team Composition & Win Predictor State
+  const [favoriteHeroIds, setFavoriteHeroIds] = useState<number[]>([]);
+  const [savedLineups, setSavedLineups] = useState<FavoriteHeroLineup[]>(() =>
+    loadSavedLineupsFromStorage(),
+  );
+  const [predictorAllySlots, setPredictorAllySlots] = useState<Array<number | null>>([
+    null,
+    null,
+    null,
+    null,
+    null,
+  ]);
+  const [predictorEnemySlots, setPredictorEnemySlots] = useState<Array<number | null>>([
+    null,
+    null,
+    null,
+    null,
+    null,
+  ]);
+
+  function toFiveSlots(ids: number[]): Array<number | null> {
+    return [0, 1, 2, 3, 4].map((idx) => ids[idx] ?? null);
+  }
+
+  function handleChangeFavoriteHeroIds(nextIds: number[]) {
+    setFavoriteHeroIds(nextIds);
+    // Keep Win Predictor's Your Team synchronized with user's selected composition
+    // unless a hero is already occupied in Opponent slots
+    setPredictorAllySlots(
+      [0, 1, 2, 3, 4].map((idx) => {
+        const candidate = nextIds[idx] ?? null;
+        return candidate && !predictorEnemySlots.includes(candidate) ? candidate : null;
+      }),
+    );
+  }
+
+  function handlePredictFromFavoriteLineup(heroIds: number[]) {
+    const cleanEnemies = predictorEnemySlots.map((id) =>
+      id && heroIds.includes(id) ? null : id,
+    );
+    setPredictorEnemySlots(cleanEnemies);
+    setPredictorAllySlots(toFiveSlots(heroIds));
+    setActiveTab('calculator');
+  }
+
+  function handleSendDraftToPredictor(allyIds: number[], enemyIds: number[]) {
+    setPredictorAllySlots(toFiveSlots(allyIds));
+    setPredictorEnemySlots(toFiveSlots(enemyIds));
+    setActiveTab('calculator');
+  }
+
+  // Scroll to top when switching primary tabs
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [activeTab]);
 
   // Load initial public datasets (positions, ranks, game version)
   useEffect(() => {
@@ -295,6 +353,11 @@ export default function App() {
                   onSelectDossier={handleSelectDossier}
                   onExploreMeta={() => setActiveTab('heroes')}
                   onOpenHero={setSelectedHeroId}
+                  favoriteHeroIds={favoriteHeroIds}
+                  onChangeFavoriteHeroIds={handleChangeFavoriteHeroIds}
+                  savedLineups={savedLineups}
+                  onChangeSavedLineups={setSavedLineups}
+                  onPredictMatchup={handlePredictFromFavoriteLineup}
                 />
 
                 {/* Top Meta Snapshot right below the Account Search hero */}
@@ -392,6 +455,7 @@ export default function App() {
             heroNameMap={heroNameMap}
             equipmentList={equipmentList}
             equipmentLoading={equipmentLoading}
+            onSendToPredictor={handleSendDraftToPredictor}
           />
         )}
 
@@ -408,7 +472,20 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'calculator' && <WinRateCalculatorView />}
+        {activeTab === 'calculator' && (
+          <WinPredictorView
+            allyHeroIds={predictorAllySlots}
+            enemyHeroIds={predictorEnemySlots}
+            onChangeAllyHeroIds={setPredictorAllySlots}
+            onChangeEnemyHeroIds={setPredictorEnemySlots}
+            savedLineups={savedLineups}
+            heroRanks={heroRanks}
+            heroRanksLoading={heroRanksLoading}
+            positionMap={positionMap}
+            heroNameMap={heroNameMap}
+            onOpenHero={setSelectedHeroId}
+          />
+        )}
       </main>
 
       <footer className="border-t border-slate-800/70 py-6 px-4 sm:px-6 text-xs text-slate-500">

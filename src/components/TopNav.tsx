@@ -13,7 +13,7 @@ const NAV_ITEMS: Array<{ id: AppTab; label: string; mobileLabel: string }> = [
   { id: 'heroes', label: 'Hero Meta', mobileLabel: 'Heroes' },
   { id: 'counter', label: 'Item Counter', mobileLabel: 'Counter' },
   { id: 'ranks', label: 'Rank Ladder', mobileLabel: 'Ranks' },
-  { id: 'calculator', label: 'WR Calculator', mobileLabel: 'WR Calc' },
+  { id: 'calculator', label: 'Win Predictor', mobileLabel: 'Predict' },
 ];
 
 export function TopNav({

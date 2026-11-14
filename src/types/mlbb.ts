@@ -454,3 +454,58 @@ export interface LineupWinRateSummary {
   roleCoverage: string[];
 }
 
+export interface TeamDraftProfile {
+  heroCount: number;
+  averageWinRatePct: number | null;
+  physicalCount: number;
+  magicCount: number;
+  tankFrontlineCount: number;
+  sustainCount: number;
+  ccCount: number;
+  burstCount: number;
+  synergyPairs: Array<{ heroA: string; heroB: string }>;
+  roleCoverage: string[];
+  balanceScore: number;
+}
+
+export interface WinPredictionFactor {
+  id: 'meta' | 'counters' | 'synergy' | 'balance';
+  label: string;
+  allyDisplay: string;
+  enemyDisplay: string;
+  edgePoints: number; // positive favors ally team, negative favors opponent
+  summary: string;
+}
+
+export interface WinPredictionMatchupEdge {
+  allyHeroName: string;
+  enemyHeroName: string;
+  favoredSide: 'ally' | 'enemy';
+  reason: string;
+}
+
+export type WinVerdict =
+  | 'Strong Advantage'
+  | 'Favored'
+  | 'Even Matchup'
+  | 'Underdog'
+  | 'Tough Matchup'
+  | 'Pick Opponent'
+  | 'Pick Your Team'
+  | 'Awaiting Draft';
+
+export interface WinPredictionResult {
+  hasTeams: boolean;
+  isFullFiveVsFive: boolean;
+  winProbabilityPct: number;
+  opponentProbabilityPct: number;
+  verdict: WinVerdict;
+  edgePct: number;
+  allyProfile: TeamDraftProfile;
+  enemyProfile: TeamDraftProfile;
+  factors: WinPredictionFactor[];
+  matchupEdges: WinPredictionMatchupEdge[];
+  tacticalNotes: string[];
+}
+
+

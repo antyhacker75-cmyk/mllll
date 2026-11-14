@@ -236,6 +236,9 @@ export interface HeroMetadataSummary {
   roles: string[];
   lanes: string[];
   smallmap?: string;
+  assistIds?: number[];
+  strongIds?: number[];
+  weakIds?: number[];
 }
 
 export function extractHeroPositionMap(
@@ -261,10 +264,24 @@ export function extractHeroPositionMap(
       }
     }
 
+    const relation = rec.data?.relation;
+    const assistIds = (relation?.assist?.target_hero_id || []).filter(
+      (id): id is number => typeof id === 'number' && Number.isFinite(id),
+    );
+    const strongIds = (relation?.strong?.target_hero_id || []).filter(
+      (id): id is number => typeof id === 'number' && Number.isFinite(id),
+    );
+    const weakIds = (relation?.weak?.target_hero_id || []).filter(
+      (id): id is number => typeof id === 'number' && Number.isFinite(id),
+    );
+
     map.set(heroId, {
       roles,
       lanes,
       smallmap: heroData.smallmap,
+      assistIds,
+      strongIds,
+      weakIds,
     });
   }
   return map;

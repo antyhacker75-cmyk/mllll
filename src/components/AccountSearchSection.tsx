@@ -2,7 +2,7 @@ import { useMemo, useState, FormEvent } from 'react';
 import { ArrowRight, KeyRound, Search, UserCheck, Users } from 'lucide-react';
 import { PLAYER_DIRECTORY } from '../data/playerDirectory';
 import type { PlayerDossierData } from '../data/samplePlayer';
-import type { HeroRankRecord, RankRecord } from '../types/mlbb';
+import type { FavoriteHeroLineup, HeroRankRecord, RankRecord } from '../types/mlbb';
 import {
   type HeroMetadataSummary,
   formatWinRate,
@@ -26,6 +26,11 @@ interface AccountSearchSectionProps {
   onSelectDossier: (dossier: PlayerDossierData) => void;
   onExploreMeta: () => void;
   onOpenHero: (heroId: number) => void;
+  favoriteHeroIds: number[];
+  onChangeFavoriteHeroIds: (next: number[]) => void;
+  savedLineups: FavoriteHeroLineup[];
+  onChangeSavedLineups: (next: FavoriteHeroLineup[]) => void;
+  onPredictMatchup: (heroIds: number[]) => void;
 }
 
 export function AccountSearchSection({
@@ -41,6 +46,11 @@ export function AccountSearchSection({
   onSelectDossier,
   onExploreMeta,
   onOpenHero,
+  favoriteHeroIds,
+  onChangeFavoriteHeroIds,
+  savedLineups,
+  onChangeSavedLineups,
+  onPredictMatchup,
 }: AccountSearchSectionProps) {
   const [roleId, setRoleId] = useState('');
   const [zoneId, setZoneId] = useState('');
@@ -493,6 +503,11 @@ export function AccountSearchSection({
         heroRanksLoading={heroRanksLoading}
         positionMap={positionMap}
         onOpenHero={onOpenHero}
+        draftHeroIds={favoriteHeroIds}
+        onChangeDraftHeroIds={onChangeFavoriteHeroIds}
+        savedLineups={savedLineups}
+        onChangeSavedLineups={onChangeSavedLineups}
+        onPredictMatchup={onPredictMatchup}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { useMemo, useState, FormEvent } from 'react';
-import { BookmarkPlus, Check, Layers, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { ArrowRight, BookmarkPlus, Check, Layers, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import type {
   FavoriteHeroLineup,
   HeroRankRecord,
@@ -26,6 +26,11 @@ interface FavoriteLineupPanelProps {
   heroRanksLoading: boolean;
   positionMap: Map<number, HeroMetadataSummary>;
   onOpenHero: (heroId: number) => void;
+  draftHeroIds?: number[];
+  onChangeDraftHeroIds?: (next: number[]) => void;
+  savedLineups?: FavoriteHeroLineup[];
+  onChangeSavedLineups?: (next: FavoriteHeroLineup[]) => void;
+  onPredictMatchup?: (heroIds: number[]) => void;
 }
 
 const ROLE_FILTERS: Array<{ id: RoleFilter; label: string }> = [
@@ -43,16 +48,41 @@ export function FavoriteLineupPanel({
   heroRanksLoading,
   positionMap,
   onOpenHero,
+  draftHeroIds: controlledDraftIds,
+  onChangeDraftHeroIds,
+  savedLineups: controlledSavedLineups,
+  onChangeSavedLineups,
+  onPredictMatchup,
 }: FavoriteLineupPanelProps) {
-  const [draftHeroIds, setDraftHeroIds] = useState<number[]>([]);
+  const [internalDraftIds, setInternalDraftIds] = useState<number[]>([]);
   const [lineupName, setLineupName] = useState('');
   const [heroQuery, setHeroQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
-  const [savedLineups, setSavedLineups] = useState<FavoriteHeroLineup[]>(() =>
+  const [internalSavedLineups, setInternalSavedLineups] = useState<FavoriteHeroLineup[]>(() =>
     loadSavedLineupsFromStorage(),
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
+
+  const draftHeroIds = controlledDraftIds ?? internalDraftIds;
+  const savedLineups = controlledSavedLineups ?? internalSavedLineups;
+
+  function setDraftHeroIds(updater: number[] | ((prev: number[]) => number[])) {
+    const next = typeof updater === 'function' ? updater(draftHeroIds) : updater;
+    if (onChangeDraftHeroIds) {
+      onChangeDraftHeroIds(next);
+    } else {
+      setInternalDraftIds(next);
+    }
+  }
+
+  function setSavedLineups(next: FavoriteHeroLineup[]) {
+    if (onChangeSavedLineups) {
+      onChangeSavedLineups(next);
+    } else {
+      setInternalSavedLineups(next);
+    }
+  }
 
   const roster = useMemo(
     () => buildHeroRosterForLineup(heroRanks, positionMap),
@@ -356,7 +386,7 @@ export function FavoriteLineupPanel({
                   />
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="submit"
                     className="px-4 py-2 text-sm font-semibold rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 transition-colors inline-flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
@@ -364,6 +394,17 @@ export function FavoriteLineupPanel({
                     <BookmarkPlus className="w-4 h-4" aria-hidden="true" />
                     <span>Save Lineup</span>
                   </button>
+
+                  {onPredictMatchup && (
+                    <button
+                      type="button"
+                      onClick={() => onPredictMatchup(draftHeroIds)}
+                      className="px-3.5 py-2 text-sm font-medium rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                    >
+                      <span>Predict vs Opponent</span>
+                      <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  )}
 
                   <button
                     type="button"
