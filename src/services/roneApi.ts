@@ -34,6 +34,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const payload = await res.json().catch(() => null);
+
+  if (payload === null || payload === undefined) {
+    throw new Error(`API returned an empty response (${res.status})`);
+  }
+
   if (!res.ok) {
     const msg =
       payload?.detail?.[0]?.msg ||
