@@ -155,27 +155,34 @@ export default function App() {
   }, [activeTab]);
 
   const refreshPublicData = useCallback(async () => {
-    const results = await Promise.allSettled([
-      fetchGameVersion(),
-      fetchHeroPositions(),
-      fetchAcademyRanks(),
-      fetchEquipmentExpanded(),
-    ] as const);
+    const [versionResult, positionsResult, ranksResult, equipmentResult] = await Promise.all([
+      fetchGameVersion()
+        .then((value) => ({ ok: true as const, value }))
+        .catch(() => ({ ok: false as const })),
+      fetchHeroPositions()
+        .then((value) => ({ ok: true as const, value }))
+        .catch(() => ({ ok: false as const })),
+      fetchAcademyRanks()
+        .then((value) => ({ ok: true as const, value }))
+        .catch(() => ({ ok: false as const })),
+      fetchEquipmentExpanded()
+        .then((value) => ({ ok: true as const, value }))
+        .catch(() => ({ ok: false as const })),
+    ]);
 
-    const [versionResult, positionsResult, ranksResult, equipmentResult] = results;
-    if (versionResult.status === 'fulfilled' && versionResult.value) {
+    if (versionResult.ok && versionResult.value) {
       setGameVersion(versionResult.value);
       writePublicCache('gameVersion', versionResult.value);
     }
-    if (positionsResult.status === 'fulfilled' && positionsResult.value.length > 0) {
+    if (positionsResult.ok && positionsResult.value.length > 0) {
       setPositions(positionsResult.value);
       writePublicCache('positions', positionsResult.value);
     }
-    if (ranksResult.status === 'fulfilled' && ranksResult.value.length > 0) {
+    if (ranksResult.ok && ranksResult.value.length > 0) {
       setRankRecords(ranksResult.value);
       writePublicCache('rankRecords', ranksResult.value);
     }
-    if (equipmentResult.status === 'fulfilled' && equipmentResult.value.length > 0) {
+    if (equipmentResult.ok && equipmentResult.value.length > 0) {
       setEquipmentList(equipmentResult.value);
       writePublicCache('equipment', equipmentResult.value);
     }
@@ -216,7 +223,6 @@ export default function App() {
         if (res.records.length > 0) {
           setHeroRanks(res.records);
           writePublicCache(cacheKey, res.records);
-          writePublicCache('heroRanks_7_mythic', res.records);
         }
       })
       .catch((err) =>
@@ -227,6 +233,17 @@ export default function App() {
 
   useEffect(() => {
     loadHeroRanks();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadHeroRanks();
+    }, 90_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadHeroRanks();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [loadHeroRanks]);
 
   // Hydrate authenticated player dossier if JWT exists
