@@ -38,22 +38,50 @@ import { extractHeroPositionMap } from './utils/mlbb';
 
 const JWT_STORAGE_KEY = 'dawnsight_mlbb_jwt';
 
+const PUBLIC_CACHE_PREFIX = 'dawnsight_public_v1_';
+const PUBLIC_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function readPublicCache<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(PUBLIC_CACHE_PREFIX + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: number; data?: T };
+    if (typeof parsed.savedAt !== 'number' || parsed.data === undefined) return null;
+    if (Date.now() - parsed.savedAt > PUBLIC_CACHE_MAX_AGE_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writePublicCache<T>(key: string, data: T): void {
+  try {
+    localStorage.setItem(
+      PUBLIC_CACHE_PREFIX + key,
+      JSON.stringify({ savedAt: Date.now(), data }),
+    );
+  } catch {
+    // Storage can be unavailable or full; live API requests still work.
+  }
+}
+
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('account');
-  const [gameVersion, setGameVersion] = useState<string | null>(null);
+  const [gameVersion, setGameVersion] = useState<string | null>(() => readPublicCache<string>('gameVersion'));
 
   // Public Meta & Reference Data
   const [rankFilter, setRankFilter] = useState<RankFilter>('mythic');
   const [daysFilter, setDaysFilter] = useState<DaysFilter>('7');
-  const [heroRanks, setHeroRanks] = useState<HeroRankRecord[]>([]);
-  const [heroRanksLoading, setHeroRanksLoading] = useState(true);
+  const [heroRanks, setHeroRanks] = useState<HeroRankRecord[]>(() => readPublicCache<HeroRankRecord[]>('heroRanks_7_mythic') || []);
+  const [heroRanksLoading, setHeroRanksLoading] = useState(() => !readPublicCache<HeroRankRecord[]>('heroRanks_7_mythic'));
   const [heroRanksError, setHeroRanksError] = useState<string | null>(null);
 
-  const [positions, setPositions] = useState<HeroPositionRecord[]>([]);
-  const [rankRecords, setRankRecords] = useState<RankRecord[]>([]);
-  const [ranksLoading, setRanksLoading] = useState(true);
-  const [equipmentList, setEquipmentList] = useState<EquipmentRecord[]>([]);
-  const [equipmentLoading, setEquipmentLoading] = useState(true);
+  const [positions, setPositions] = useState<HeroPositionRecord[]>(() => readPublicCache<HeroPositionRecord[]>('positions') || []);
+  const [rankRecords, setRankRecords] = useState<RankRecord[]>(() => readPublicCache<RankRecord[]>('rankRecords') || []);
+  const [ranksLoading, setRanksLoading] = useState(() => !readPublicCache<RankRecord[]>('rankRecords'));
+  const [equipmentList, setEquipmentList] = useState<EquipmentRecord[]>(() => readPublicCache<EquipmentRecord[]>('equipment') || []);
+  const [equipmentLoading, setEquipmentLoading] = useState(() => !readPublicCache<EquipmentRecord[]>('equipment'));
 
   // Player Account Dossier State
   const [jwt, setJwt] = useState<string | null>(() => {
@@ -126,33 +154,56 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [activeTab]);
 
-  // Load initial public datasets (positions, ranks, game version)
-  useEffect(() => {
-    fetchGameVersion().then(setGameVersion);
-    fetchHeroPositions()
-      .then(setPositions)
-      .catch(() => setPositions([]));
-    fetchAcademyRanks()
-      .then(setRankRecords)
-      .catch(() => setRankRecords([]))
-      .finally(() => setRanksLoading(false));
-    fetchEquipmentExpanded()
-      .then(setEquipmentList)
-      .catch(() => setEquipmentList([]))
-      .finally(() => setEquipmentLoading(false));
+  const refreshPublicData = useCallback(async () => {
+    const results = await Promise.allSettled([
+      fetchGameVersion(),
+      fetchHeroPositions(),
+      fetchAcademyRanks(),
+      fetchEquipmentExpanded(),
+    ] as const);
+
+    const [versionResult, positionsResult, ranksResult, equipmentResult] = results;
+    if (versionResult.status === 'fulfilled' && versionResult.value) {
+      setGameVersion(versionResult.value);
+      writePublicCache('gameVersion', versionResult.value);
+    }
+    if (positionsResult.status === 'fulfilled' && positionsResult.value.length > 0) {
+      setPositions(positionsResult.value);
+      writePublicCache('positions', positionsResult.value);
+    }
+    if (ranksResult.status === 'fulfilled' && ranksResult.value.length > 0) {
+      setRankRecords(ranksResult.value);
+      writePublicCache('rankRecords', ranksResult.value);
+    }
+    if (equipmentResult.status === 'fulfilled' && equipmentResult.value.length > 0) {
+      setEquipmentList(equipmentResult.value);
+      writePublicCache('equipment', equipmentResult.value);
+    }
+    setRanksLoading(false);
+    setEquipmentLoading(false);
   }, []);
 
+  // Display cached public data immediately, then refresh quietly in the background.
   useEffect(() => {
-    if (activeTab === 'counter' && equipmentList.length === 0 && !equipmentLoading) {
-      setEquipmentLoading(true);
-      fetchEquipmentExpanded()
-        .then(setEquipmentList)
-        .catch(() => setEquipmentList([]))
-        .finally(() => setEquipmentLoading(false));
-    }
-  }, [activeTab, equipmentList.length, equipmentLoading]);
+    void refreshPublicData();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshPublicData();
+    }, 90_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshPublicData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refreshPublicData]);
+
   const loadHeroRanks = useCallback(() => {
-    setHeroRanksLoading(true);
+    const cacheKey = 'heroRanks_' + daysFilter + '_' + rankFilter;
+    const cached = readPublicCache<HeroRankRecord[]>(cacheKey);
+    if (cached) setHeroRanks(cached);
+    if (!cached || cached.length === 0) setHeroRanksLoading(true);
     setHeroRanksError(null);
     fetchHeroRanks({
       days: daysFilter,
@@ -161,7 +212,13 @@ export default function App() {
       sortOrder: 'desc',
       size: 150,
     })
-      .then((res) => setHeroRanks(res.records))
+      .then((res) => {
+        if (res.records.length > 0) {
+          setHeroRanks(res.records);
+          writePublicCache(cacheKey, res.records);
+          writePublicCache('heroRanks_7_mythic', res.records);
+        }
+      })
       .catch((err) =>
         setHeroRanksError(err instanceof Error ? err.message : 'Unable to fetch hero meta.'),
       )
