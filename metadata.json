@@ -1,0 +1,8 @@
+{
+  "name": "Remix DawnSight — MLBB Account \u0026 Meta Explorer",
+  "description": "Search Mobile Legends: Bang Bang player accounts, rank tiers, hero win rates, matchups, and match history powered by Rone Arena API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
