@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 interface CacheEntry {
   expiresAt: number;
+  cachedAt: number;
   status: number;
   body: unknown;
 }
@@ -412,13 +413,28 @@ async function startServer() {
     const queryStr = queryIdx >= 0 ? req.originalUrl.slice(queryIdx) : '';
     const targetUrl = `${RONE_API_BASE}${subPath}${queryStr}`;
 
-    if (req.method === 'GET' && isCacheablePublicPath(subPath)) {
-      const cached = publicGetCache.get(targetUrl);
-      if (cached && cached.expiresAt > Date.now()) {
-        res.status(cached.status).json(cached.body);
-        return;
-      }
+    const staleCandidate =
+      req.method === 'GET' && isCacheablePublicPath(subPath)
+        ? publicGetCache.get(targetUrl)
+        : undefined;
+    const usableStale =
+      staleCandidate && Date.now() - staleCandidate.cachedAt <= 24 * 60 * 60 * 1000
+        ? staleCandidate
+        : undefined;
+
+    if (staleCandidate && staleCandidate.expiresAt > Date.now()) {
+      res.set('X-Data-Source', 'memory-cache');
+      res.status(staleCandidate.status).json(staleCandidate.body);
+      return;
     }
+
+    const sendStale = () => {
+      if (!usableStale || res.headersSent) return false;
+      res.set('X-Data-Source', 'stale-cache');
+      res.set('Cache-Control', 'no-store');
+      res.status(usableStale.status).json(usableStale.body);
+      return true;
+    };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
@@ -468,6 +484,7 @@ async function startServer() {
       const contentType = upstreamRes.headers.get('content-type') || '';
 
       if (!contentType.includes('application/json')) {
+        if (upstreamRes.status >= 500 && sendStale()) return;
         res.status(upstreamRes.status || 502).json({
           code: upstreamRes.status || 502,
           message: 'Upstream API returned an unexpected response.',
@@ -478,9 +495,12 @@ async function startServer() {
 
       const parsed = JSON.parse(rawText);
 
+      if (!upstreamRes.ok && upstreamRes.status >= 500 && sendStale()) return;
+
       if (req.method === 'GET' && upstreamRes.ok && isCacheablePublicPath(subPath)) {
         publicGetCache.set(targetUrl, {
           expiresAt: Date.now() + PUBLIC_CACHE_TTL_MS,
+          cachedAt: Date.now(),
           status: upstreamRes.status,
           body: parsed,
         });
@@ -488,6 +508,7 @@ async function startServer() {
 
       res.status(upstreamRes.status).json(parsed);
     } catch (err) {
+      if (sendStale()) return;
       const isAbort = err instanceof Error && err.name === 'AbortError';
       res.status(isAbort ? 504 : 502).json({
         code: isAbort ? 504 : 502,
